@@ -382,6 +382,7 @@ class ContentService:
                 meta = adapter.generate(prompt, NEGATIVE_PROMPT, seed, w, h, path, ref["file_path"] if ref else None)
             except ImageError as e:
                 raise RuntimeError(f"{i + 1}번째 이미지 생성 실패: {e}") from e
+            path = Path(meta.get("path") or path)  # 어댑터가 형식(jpg 등)에 맞춰 확장자를 바꿀 수 있음
             aid = new_id("ast")
             self.db.insert("assets", {
                 "asset_id": aid, "influencer_id": inf["influencer_id"], "story_id": story["story_id"],

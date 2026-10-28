@@ -16,9 +16,9 @@ MCP 서버는 Claude Desktop / Claude Code 같은 MCP 클라이언트가 실행�
 {
   "mcpServers": {
     "ai-influencer-studio": {
-      "command": "D:\\AI인플루언서_MCP\\.venv\\Scripts\\python.exe",
+      "command": "D:\\project\\AI인플루언서_MCP\\.venv\\Scripts\\python.exe",
       "args": ["-m", "influencer_studio", "mcp"],
-      "cwd": "D:\\AI인플루언서_MCP"
+      "cwd": "D:\\project\\AI인플루언서_MCP"
     }
   }
 }
@@ -27,7 +27,7 @@ MCP 서버는 Claude Desktop / Claude Code 같은 MCP 클라이언트가 실행�
 Claude Code 에서는 다음 한 줄로 등록할 수 있습니다.
 
 ```bat
-claude mcp add ai-influencer-studio -- D:\AI인플루언서_MCP\.venv\Scripts\python.exe -m influencer_studio mcp
+claude mcp add ai-influencer-studio -- D:\project\AI인플루언서_MCP\.venv\Scripts\python.exe -m influencer_studio mcp
 ```
 
 웹 대시보드와 MCP 서버는 같은 `data/studio.db` 를 함께 사용하므로 동시에 켜 두어도 됩니다.
@@ -58,7 +58,7 @@ claude mcp add ai-influencer-studio -- D:\AI인플루언서_MCP\.venv\Scripts\py
 | ⑦ 분석 | `services/analytics.py` |
 | 작업 큐·스케줄러 | `services/jobs.py`, `services/scheduler.py` |
 | 자동화 정책 | `services/policy.py` |
-| 제작 도구 어댑터 | `adapters/` (Ollama, 템플릿, ComfyUI, FFmpeg, 임베딩) |
+| 제작 도구 어댑터 | `adapters/` (Ollama, 템플릿, Gemini 이미지, ComfyUI, FFmpeg, 임베딩) |
 | 웹 대시보드 | `web/app.py`, `web/static/index.html` |
 | DB 스키마 (18개 테이블 + 검색 색인) | `db.py` |
 
@@ -69,10 +69,29 @@ claude mcp add ai-influencer-studio -- D:\AI인플루언서_MCP\.venv\Scripts\py
 | 언어 모델 (Ollama) | ⚠ GPU 실행 실패 | `qwen2.5-coder:7b` 가 "CUDA error: the provided PTX was compiled with an unsupported toolchain" 로 종료됩니다. NVIDIA 드라이버(현재 560.94)를 최신으로 올리면 해결될 가능성이 높습니다. 그 전까지는 `.env` 에 `AIS_OLLAMA_NUM_GPU=0` 으로 CPU 실행이 가능하지만 호출당 약 2분 걸립니다. |
 | 모델 선택 | ⚠ 권장 변경 | 설치된 모델은 코드용(coder)이라 한국어 스토리 품질이 낮습니다. `ollama pull qwen2.5:7b` 후 `AIS_OLLAMA_MODEL=qwen2.5:7b` 를 권장합니다. |
 | 언어 모델이 없을 때 | ✅ | 템플릿 생성기로 자동 대체되고, 결과에 `provider=template` 이 표시됩니다. |
-| 이미지 (ComfyUI) | ❌ 미실행 | ComfyUI 를 켜고 `config/comfyui_workflow.example.json` 을 참고해 `config/comfyui_workflow.json` 을 만드세요. 그 전에는 자리표시 이미지가 만들어지며 이 이미지는 승인·게시가 막힙니다. GTX 1070(8GB)은 SD1.5 계열이 현실적입니다. |
+| 이미지 (Gemini API) | ⚠ 키 필요 | 기본 이미지 생성기입니다. `.env` 에 `AIS_GEMINI_API_KEY` 를 넣으면 동작합니다 (아래 'Gemini 이미지 설정'). 키가 없으면 자리표시 이미지가 만들어지며 이 이미지는 승인·게시가 막힙니다. |
+| 이미지 (ComfyUI, 선택) | ❌ 미실행 | 로컬 생성을 원할 때 `AIS_IMAGE_PROVIDER=comfyui` 와 `config/comfyui_workflow.json` 을 설정합니다. GTX 1070(8GB)은 SD1.5 계열이 현실적입니다. |
 | 영상 (FFmpeg) | ❌ 미설치 | FFmpeg 설치 후 실제 이미지로 세로 슬라이드쇼 영상을 만듭니다. |
 | 음성 (TTS) | ❌ 어댑터 없음 | 호출하면 `NOT_CONFIGURED` 를 그대로 반환합니다. |
 | SNS 자동 게시 | ❌ API 미연동 | 모든 플랫폼이 `MANUAL_REQUIRED` 로 처리됩니다. `local_export` 만 자동(outbox 폴더). |
+
+## Gemini 이미지 설정
+
+1. [Google AI Studio](https://aistudio.google.com/apikey)에서 API 키를 발급합니다.
+2. `.env` 파일(없으면 `.env.example` 을 복사)에 키를 넣습니다. 키는 코드나 git 에 들어가지 않습니다.
+   ```
+   AIS_IMAGE_PROVIDER=gemini
+   AIS_GEMINI_API_KEY=발급받은_키
+   AIS_GEMINI_IMAGE_MODEL=gemini-nano-banana-2.1
+   AIS_GEMINI_IMAGE_SIZE=1K
+   ```
+3. 대시보드를 다시 시작하고 `모델·시스템 설정` 에서 이미지가 `gemini:…` 로 표시되는지 확인합니다.
+
+- 인플루언서에 **캐릭터 참조 이미지**를 등록해 두면 매번 그 사진을 함께 보내 같은 얼굴·헤어·나이를 유지하도록 요청합니다. 그래도 완벽한 일관성은 보장되지 않으므로 검수함에서 확인하세요.
+- 비율은 콘텐츠 설정(4:5, 9:16, 1:1, 16:9)에 맞춰 자동으로 지정됩니다.
+- Gemini 이미지 생성은 유료로 과금될 수 있습니다. 하루 생성 장수는 `AIS_DAILY_IMAGE_BUDGET`(기본 30장)으로 제한됩니다.
+- 생성된 이미지에는 Google 의 SynthID 워터마크가 들어갈 수 있으며, 게시할 때는 플랫폼의 AI 생성 콘텐츠 표시 정책을 따르세요.
+- 모델 이름은 Google 이 자주 바꿉니다. 오류(404)가 나면 [Gemini 이미지 생성 문서](https://ai.google.dev/gemini-api/docs/image-generation)에서 현재 모델 ID 를 확인해 `AIS_GEMINI_IMAGE_MODEL` 을 바꾸세요.
 
 ## 안전장치
 

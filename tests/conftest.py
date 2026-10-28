@@ -21,6 +21,7 @@ def offline_env(monkeypatch):
     monkeypatch.setenv("AIS_RUN_WORKER", "0")
     monkeypatch.setenv("AIS_OLLAMA_EMBED_MODEL", "")
     monkeypatch.setenv("AIS_FFMPEG", "ffmpeg-not-installed-for-tests")
+    monkeypatch.setenv("AIS_GEMINI_API_KEY", "")  # 실제 키가 .env 에 있어도 테스트에서 외부 호출을 하지 않음
 
 
 @pytest.fixture

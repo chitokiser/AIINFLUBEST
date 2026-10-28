@@ -48,8 +48,12 @@ class Settings:
     llm_timeout: int = 180
     ollama_num_gpu: int | None = None  # 0 이면 CPU 로만 실행 (GPU 드라이버 문제 시)
 
-    # 이미지: auto(ComfyUI 가능 시 ComfyUI, 아니면 자리표시 이미지) | comfyui | placeholder
+    # 이미지: auto(Gemini 키가 있으면 Gemini → ComfyUI → 자리표시) | gemini | comfyui | placeholder
     image_provider: str = "auto"
+    gemini_api_key: str = ""
+    gemini_image_model: str = "gemini-nano-banana-2.1"
+    gemini_api_version: str = "v1"
+    gemini_image_size: str = "1K"
     comfyui_url: str = "http://127.0.0.1:8188"
     comfyui_workflow: Path = field(default_factory=lambda: PROJECT_ROOT / "config" / "comfyui_workflow.json")
     ffmpeg_path: str = "ffmpeg"
@@ -84,6 +88,10 @@ def load_settings(data_dir: str | os.PathLike | None = None) -> Settings:
         ollama_num_gpu=int(os.environ["AIS_OLLAMA_NUM_GPU"]) if os.environ.get("AIS_OLLAMA_NUM_GPU", "").strip() else None,
         image_provider=os.environ.get("AIS_IMAGE_PROVIDER", "auto"),
         comfyui_url=os.environ.get("AIS_COMFYUI_URL", "http://127.0.0.1:8188"),
+        gemini_api_key=os.environ.get("AIS_GEMINI_API_KEY", "").strip(),
+        gemini_image_model=os.environ.get("AIS_GEMINI_IMAGE_MODEL", "gemini-nano-banana-2.1").strip(),
+        gemini_api_version=os.environ.get("AIS_GEMINI_API_VERSION", "v1").strip(),
+        gemini_image_size=os.environ.get("AIS_GEMINI_IMAGE_SIZE", "1K").strip().upper(),
         ffmpeg_path=os.environ.get("AIS_FFMPEG", "ffmpeg"),
         agent_can_approve_stories=_bool("AIS_AGENT_APPROVE_STORIES", True),
         agent_can_approve_content=_bool("AIS_AGENT_APPROVE_CONTENT", False),

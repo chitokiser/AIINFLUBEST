@@ -2,12 +2,15 @@
 
 - ComfyUIAdapter: ComfyUI API 형식 워크플로(JSON)의 자리표시자({{POSITIVE}}, {{NEGATIVE}}, {{SEED}},
   {{WIDTH}}, {{HEIGHT}}, {{REFERENCE_IMAGE}})를 채워 /prompt 로 제출하고 결과 이미지를 내려받습니다.
+- GeminiImageAdapter: Google Gemini API(generateContent, 이미지 출력)로 생성합니다. 캐릭터 참조 이미지가 있으면
+  함께 보내 같은 인물을 유지하도록 요청합니다. API 키는 환경 변수 AIS_GEMINI_API_KEY 로만 받습니다.
 - PlaceholderImageAdapter: 생성 모델이 없을 때 쓰는 단색 PNG. 자산에 is_placeholder=1 로 기록되어
   실제 결과물과 구분되며, 검수함에서 표시됩니다.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import struct
@@ -129,10 +132,90 @@ class ComfyUIAdapter(ImageAdapter):
         raise ImageError("ComfyUI 이미지 생성 시간이 초과되었습니다.")
 
 
+GEMINI_RATIOS = {"1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"}
+MIME_SUFFIX = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
+
+
+class GeminiImageAdapter(ImageAdapter):
+    name = "gemini"
+
+    def __init__(self, api_key: str, model: str, api_version: str = "v1", image_size: str = "1K",
+                 base_url: str = "https://generativelanguage.googleapis.com", timeout: int = 180):
+        self.api_key = api_key
+        self.model = model
+        self.api_version = api_version
+        self.image_size = image_size
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self.name = f"gemini:{model}"
+
+    def available(self) -> bool:
+        return bool(self.api_key)
+
+    @staticmethod
+    def _ratio(width: int, height: int) -> str:
+        from math import gcd
+        g = gcd(width, height) or 1
+        r = f"{width // g}:{height // g}"
+        if r in GEMINI_RATIOS:
+            return r
+        target = width / height
+        return min(GEMINI_RATIOS, key=lambda x: abs(int(x.split(":")[0]) / int(x.split(":")[1]) - target))
+
+    def generate(self, prompt, negative, seed, width, height, out_path, reference_image=None):
+        if not self.api_key:
+            raise ImageError("AIS_GEMINI_API_KEY 가 설정되지 않았습니다. .env 파일에 API 키를 넣으세요.")
+        text = (f"Photorealistic lifestyle photo for social media. {prompt}. "
+                f"Do not include: {negative}. No text, captions or watermarks in the image.")
+        parts: list[dict] = [{"text": text}]
+        if reference_image and Path(reference_image).is_file():
+            ref = Path(reference_image)
+            mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(ref.suffix.lower(), "image/png")
+            parts[0]["text"] = ("Use the attached reference photo as the identity of the main person: keep the same face, "
+                                "hairstyle and age. " + text)
+            parts.append({"inline_data": {"mime_type": mime, "data": base64.b64encode(ref.read_bytes()).decode()}})
+        body = {"contents": [{"parts": parts}],
+                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
+                                     "imageConfig": {"aspectRatio": self._ratio(width, height),
+                                                     "imageSize": self.image_size}}}
+        url = f"{self.base_url}/{self.api_version}/models/{self.model}:generateContent"
+        req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
+                                     headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                data = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")[:400]
+            raise ImageError(f"Gemini API 오류 {e.code}: {detail}") from e
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise ImageError(f"Gemini API 호출 실패: {e}") from e
+        texts = []
+        for cand in data.get("candidates") or []:
+            for part in (cand.get("content") or {}).get("parts") or []:
+                inline = part.get("inlineData") or part.get("inline_data")
+                if inline and inline.get("data") and not part.get("thought"):
+                    mime = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+                    path = out_path.with_suffix(MIME_SUFFIX.get(mime, ".png"))
+                    path.write_bytes(base64.b64decode(inline["data"]))
+                    return {"model": self.name, "path": str(path), "aspect_ratio": self._ratio(width, height),
+                            "image_size": self.image_size}
+                if part.get("text"):
+                    texts.append(part["text"])
+        reason = ((data.get("promptFeedback") or {}).get("blockReason")
+                  or (data.get("candidates") or [{}])[0].get("finishReason"))
+        raise ImageError(f"Gemini 가 이미지를 돌려주지 않았습니다 (사유: {reason or '알 수 없음'}). {' '.join(texts)[:200]}")
+
+
 def build_image_adapter(settings) -> ImageAdapter:
     if settings.image_provider == "placeholder":
         return PlaceholderImageAdapter()
+    gemini = GeminiImageAdapter(settings.gemini_api_key, settings.gemini_image_model, settings.gemini_api_version,
+                                settings.gemini_image_size)
+    if settings.image_provider == "gemini":
+        return gemini
     comfy = ComfyUIAdapter(settings.comfyui_url, settings.comfyui_workflow)
     if settings.image_provider == "comfyui":
         return comfy
+    if gemini.available():
+        return gemini
     return comfy if comfy.available() else PlaceholderImageAdapter()

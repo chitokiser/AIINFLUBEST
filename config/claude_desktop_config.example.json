@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "ai-influencer-studio": {
-      "command": "D:\\AI인플루언서_MCP\\.venv\\Scripts\\python.exe",
+      "command": "D:\\project\\AI인플루언서_MCP\\.venv\\Scripts\\python.exe",
       "args": ["-m", "influencer_studio", "mcp"],
-      "cwd": "D:\\AI인플루언서_MCP",
+      "cwd": "D:\\project\\AI인플루언서_MCP",
       "env": {
         "PYTHONIOENCODING": "utf-8"
       }
