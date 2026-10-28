@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Influencer Studio</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--ink:#1b1f24;--muted:#69707a;--line:#e3e6ea;--accent:#3a5bd9;--accent-ink:#fff;
+--ok:#1f8a4c;--warn:#b7791f;--err:#c53030;--info:#2b6cb0;--chip:#eef1f6}
+@media (prefers-color-scheme:dark){:root{--bg:#14171b;--panel:#1c2026;--ink:#e6e8eb;--muted:#9aa1ab;--line:#2c323a;
+--accent:#7d97ff;--accent-ink:#0d1020;--chip:#262c34}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,"Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0 12px 0 0}header select{min-width:200px}
+.layout{display:grid;grid-template-columns:190px 1fr;min-height:calc(100vh - 53px)}
+nav{border-right:1px solid var(--line);background:var(--panel);padding:8px}
+nav button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:8px 10px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--chip);font-weight:600}nav .badge{float:right;background:var(--err);color:#fff;border-radius:10px;padding:0 7px;font-size:12px}
+main{padding:16px;max-width:1200px;width:100%}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 10px}.card h3{font-size:14px;margin:12px 0 6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}.stat b{display:block;font-size:22px}
+.stat span{color:var(--muted);font-size:12px}
+.two{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:14px}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+textarea{width:100%;min-height:80px}label{display:block;margin:6px 0 2px;color:var(--muted);font-size:12px}
+button.b{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer;margin:2px}
+button.p{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}button.d{color:var(--err)}
+button:disabled{opacity:.5;cursor:wait}
+table{width:100%;border-collapse:collapse}td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}tr.click{cursor:pointer}tr.click:hover{background:var(--chip)}
+.chip{display:inline-block;background:var(--chip);border-radius:10px;padding:0 8px;font-size:12px;margin:1px}
+.s-APPROVED,.s-COMPLETED,.s-PUBLISHED,.s-ACTIVE{color:var(--ok)}.s-FAILED,.s-REJECTED{color:var(--err)}
+.s-REVIEW_REQUIRED,.s-PENDING,.s-MANUAL_REQUIRED,.s-DRAFT,.s-QUEUED,.s-RUNNING{color:var(--warn)}
+.issue{padding:4px 8px;border-left:3px solid var(--info);margin:3px 0;background:var(--chip);border-radius:0 6px 6px 0}
+.issue.ERROR{border-color:var(--err)}.issue.WARNING{border-color:var(--warn)}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;max-height:420px;overflow:auto;font-size:12px}
+.muted{color:var(--muted)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}.row>div{flex:1;min-width:140px}
+.imgs img{width:150px;border-radius:6px;border:1px solid var(--line);margin:3px}
+#toast{position:fixed;right:16px;bottom:16px;max-width:420px;padding:10px 14px;border-radius:8px;background:var(--ink);color:var(--bg);display:none;z-index:10;white-space:pre-wrap}
+@media (max-width:760px){.layout{grid-template-columns:1fr}nav{display:flex;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
+nav button{white-space:nowrap;width:auto}.two{grid-template-columns:1fr}main{padding:12px}header{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header><h1>AI Influencer Studio</h1>
+<select id="inf" title="작업할 인플루언서"></select><span class="muted" id="infStatus"></span></header>
+<div class="layout">
+<nav id="nav"></nav>
+<main id="main"></main>
+</div>
+<div id="toast"></div>
+<script>
+const VIEWS=[["dash","대시보드"],["inf","인플루언서 관리"],["story","스토리 관리"],["archive","스토리 아카이브"],["studio","콘텐츠 스튜디오"],
+["review","콘텐츠 검수함"],["publish","예약 게시"],["analytics","성과 분석"],["jobs","AI 작업 관리"],["settings","모델·시스템 설정"]];
+let view=localStorage.getItem("view")||"dash", INF=localStorage.getItem("inf")||"", pending=0;
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const st=s=>`<span class="s-${esc(s)}">${esc(s)}</span>`;
+function toast(msg,ms=3500){const t=$("#toast");t.textContent=msg;t.style.display="block";clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",ms)}
+async function api(method,path,body){
+  const opt={method,headers:{"Content-Type":"application/json"}};const tok=localStorage.getItem("token");if(tok)opt.headers["X-Admin-Token"]=tok;
+  if(body!==undefined)opt.body=JSON.stringify(body);
+  const r=await fetch(path,opt);const j=await r.json().catch(()=>({ok:false,message:"응답을 읽을 수 없습니다"}));
+  if(!r.ok||j.ok===false){toast("⚠ "+(j.message||j.detail||r.status));throw j}return j}
+async function act(btn,fn){if(btn)btn.disabled=true;try{return await fn()}finally{if(btn)btn.disabled=false}}
+function issues(v){if(!v)return"";return (v.issues||[]).map(i=>`<div class="issue ${i.severity}"><b>${i.severity}</b> ${esc(i.code)} — ${esc(i.message)}${i.suggestion?`<br><span class="muted">제안: ${esc(i.suggestion)}</span>`:""}</div>`).join("")||'<span class="muted">문제 없음</span>'}
+function needInf(){if(!INF){return '<div class="card">먼저 위쪽에서 인플루언서를 선택하거나 <b>인플루언서 관리</b>에서 새로 만드세요.</div>'}return""}
+
+function nav(){ $("#nav").innerHTML=VIEWS.map(([k,l])=>`<button class="${k===view?"on":""}" onclick="go('${k}')">${l}${k==="review"&&pending?`<span class="badge">${pending}</span>`:""}</button>`).join("") }
+function go(v){view=v;localStorage.setItem("view",v);nav();render()}
+async function loadInf(){const r=await api("GET","/api/influencers");const sel=$("#inf");
+  sel.innerHTML='<option value="">— 인플루언서 선택 —</option>'+r.influencers.map(i=>`<option value="${i.influencer_id}" ${i.influencer_id===INF?"selected":""}>${esc(i.name)} (${i.status})</option>`).join("");
+  const cur=r.influencers.find(i=>i.influencer_id===INF);$("#infStatus").innerHTML=cur?st(cur.status):"";if(INF&&!cur){INF="";localStorage.removeItem("inf")}}
+$("#inf").onchange=e=>{INF=e.target.value;localStorage.setItem("inf",INF);loadInf();render()};
+async function refreshBadge(){try{const d=await api("GET","/api/dashboard");pending=d.pending_reviews;nav()}catch(e){}}
+
+const R={};
+async function render(){const m=$("#main");m.innerHTML='<span class="muted">불러오는 중…</span>';try{await R[view](m)}catch(e){m.innerHTML=`<div class="card">오류: ${esc(e.message||e)}</div>`}}
+
+R.dash=async m=>{const d=await api("GET","/api/dashboard");pending=d.pending_reviews;nav();
+  m.innerHTML=`<div class="grid">${[["인플루언서",d.influencers],["스토리",d.stories],["검수 대기",d.pending_reviews],["진행 중 작업",d.jobs_running],["실패 작업",d.jobs_failed],["게시 완료",d.published],["수동 게시 필요",d.manual_required]].map(([l,v])=>`<div class="stat"><span>${l}</span><b>${v}</b></div>`).join("")}</div>
+  <div class="card" style="margin-top:14px"><h2>최근 활동 (감사 로그)</h2><table><tr><th>시각</th><th>행위자</th><th>작업</th><th>대상</th></tr>
+  ${d.recent_audit.map(a=>`<tr><td>${esc(a.created_at)}</td><td>${esc(a.actor_id)}</td><td>${esc(a.action)}</td><td class="muted">${esc(a.target_type||"")} ${esc(a.target_id||"")}</td></tr>`).join("")}</table></div>`};
+
+R.inf=async m=>{const list=await api("GET","/api/influencers");
+  m.innerHTML=`<div class="two"><div><div class="card"><h2>새 AI 인플루언서</h2>
+  <textarea id="desc" placeholder="예) 베트남 하노이에서 활동하는 27세 한국인 여성 AI 인플루언서를 생성해. 한국 음식, 여행, 패션을 주제로 콘텐츠를 제작하고, 밝고 친근한 말투를 사용해. 한국어와 베트남어를 사용하고, 장기적으로 한국과 베트남의 문화 교류를 다루는 스토리를 만들어."></textarea>
+  <label>이름 고정 (선택)</label><input id="fixname" placeholder="예: 김하린">
+  <div style="margin-top:8px"><button class="b p" onclick="act(this,createInf)">초안 생성</button></div></div>
+  <div class="card"><h2>목록</h2><table>${list.influencers.map(i=>`<tr class="click" onclick="pick('${i.influencer_id}')"><td>${esc(i.name)}<br><span class="muted">${esc(i.handle||"")}</span></td><td>${st(i.status)}</td><td class="muted">v${i.current_version}</td></tr>`).join("")||'<tr><td class="muted">아직 없습니다</td></tr>'}</table></div></div>
+  <div id="infDetail">${INF?"":'<div class="card muted">목록에서 인플루언서를 선택하세요.</div>'}</div></div>`;
+  if(INF)await infDetail()};
+async function pick(id){INF=id;localStorage.setItem("inf",id);await loadInf();await infDetail()}
+async function createInf(){const body={description:$("#desc").value};if($("#fixname").value)body.overrides={name:$("#fixname").value};
+  const r=await api("POST","/api/influencers",body);INF=r.influencer_id;localStorage.setItem("inf",INF);toast(`${r.profile.name} 초안을 만들었습니다 (생성기: ${r.provider}). 설정을 확인하고 '등록 승인'을 누르세요.`,6000);await loadInf();render()}
+async function infDetail(){const r=await api("GET","/api/influencers/"+INF);const i=r.influencer,p=i.profile_json;const others=(await api("GET","/api/influencers")).influencers.filter(x=>x.influencer_id!==INF);
+  $("#infDetail").innerHTML=`<div class="card"><h2>${esc(p.name)} <span class="muted">@${esc(p.handle||"")}</span> ${st(i.status)}</h2>
+  ${i.status==="DRAFT"?`<button class="b p" onclick="act(this,()=>setStatus('ACTIVE'))">등록 승인 (ACTIVE)</button>`:""}
+  ${i.status==="ACTIVE"?`<button class="b d" onclick="if(confirm('활동을 중지하고 보관할까요? 데이터는 삭제되지 않습니다.'))act(this,()=>setStatus('ARCHIVED'))">활동 중지·보관</button>`:""}
+  ${i.status==="ARCHIVED"?`<button class="b" onclick="act(this,()=>setStatus('ACTIVE'))">복구</button>`:""}
+  <button class="b" onclick="act(this,async()=>{const x=await api('POST','/api/influencers/${INF}/export');toast('내보냄: '+x.path,6000)})">아카이브 내보내기</button>
+  <div class="grid" style="margin-top:10px"><div class="stat"><span>스토리</span><b>${r.stats.stories||0}</b></div><div class="stat"><span>확정</span><b>${r.stats.approved||0}</b></div><div class="stat"><span>미해결 사건</span><b>${r.open_threads.length}</b></div><div class="stat"><span>마지막 스토리</span><b style="font-size:14px">${esc(r.stats.last_story_date||"-")}</b></div></div>
+  <h3>캐릭터 설정</h3><p>${esc(p.age)}세 · ${esc(p.gender||"")} · ${esc(p.occupation)} · ${esc(p.location?.city)} ${esc(p.location?.district)}<br>
+  성격: ${(p.personality||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join("")}<br>관심: ${(p.interests||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join("")}<br>
+  말투: ${esc(p.speech_style)} · 언어: ${(p.languages||[]).join(", ")}<br>장기 목표: ${esc(p.long_term_goal)}</p>
+  <h3>외모 (모든 이미지 생성에 사용)</h3><p class="muted">${esc(p.production?.character_prompt)}<br>고정 시드: ${esc(p.production?.seed)}</p>
+  <h3>캐릭터 참조 이미지</h3><div class="imgs">${r.references.map(a=>a.url?`<img src="${esc(a.url)}">`:"").join("")||'<span class="muted">없음 — 얼굴 일관성을 위해 참조 이미지를 등록하세요.</span>'}</div>
+  <input type="file" id="refFile" accept="image/*"> <button class="b" onclick="act(this,uploadRef)">참조 이미지 등록</button>
+  <h3>설정 변경</h3><p class="muted">핵심 설정(이름·나이·직업·성격·외모 등)은 사유와 함께 새 버전으로 남고, 과거 기록은 지우지 않습니다.</p>
+  <textarea id="chg" placeholder='{"occupation": "K-컬처 콘텐츠 크리에이터 겸 요리 강사"}'></textarea><label>변경 사유</label><input id="chgReason" style="width:100%">
+  <button class="b" onclick="act(this,saveChange)">변경 저장</button>
+  <h3>다른 인플루언서와의 관계</h3><div class="row"><div><select id="relOther">${others.map(o=>`<option value="${o.influencer_id}">${esc(o.name)}</option>`).join("")}</select></div><div><input id="relType" placeholder="친구 / 동료 / 사업 파트너"></div><div><button class="b" onclick="act(this,relate)">관계 설정</button></div></div>
+  <p>${r.relationships.map(x=>`<span class="chip">${esc(x.name)} · ${esc(x.relation_type)}</span>`).join("")||'<span class="muted">관계 없음</span>'}</p>
+  <h3>버전 이력</h3><table><tr><th>버전</th><th>상태</th><th>변경</th><th>사유</th><th>작성</th></tr>${r.versions.map(v=>`<tr><td>v${v.version_no}</td><td>${st(v.status)}</td><td>${esc((v.changed_fields||[]).join(", "))}</td><td>${esc(v.change_reason)}</td><td class="muted">${esc(v.created_by)} ${esc(v.created_at)}</td></tr>`).join("")}</table>
+  <h3>전체 프로필 (JSON)</h3><pre>${esc(JSON.stringify(p,null,2))}</pre></div>`}
+async function setStatus(s){await api("PATCH","/api/influencers/"+INF,{status:s});toast("상태: "+s);await loadInf();await infDetail()}
+async function saveChange(){let ch;try{ch=JSON.parse($("#chg").value)}catch(e){toast("JSON 형식이 올바르지 않습니다");return}
+  const r=await api("PATCH","/api/influencers/"+INF,{changes:ch,reason:$("#chgReason").value});toast(r.status==="PROPOSED"?"변경안이 검수함에 올라갔습니다":"반영되었습니다 (v"+r.version_no+")");await infDetail()}
+async function relate(){await api("POST",`/api/influencers/${INF}/relate`,{other_influencer_id:$("#relOther").value,relation_type:$("#relType").value||"친구"});toast("관계를 설정했습니다");await infDetail()}
+async function uploadRef(){const f=$("#refFile").files[0];if(!f){toast("파일을 고르세요");return}
+  const data=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(f)});
+  await api("POST",`/api/influencers/${INF}/reference`,{filename:f.name,data_base64:data});toast("참조 이미지를 등록했습니다");await infDetail()}
+
+R.story=async m=>{const n=needInf();if(n){m.innerHTML=n;return}
+  const [tl,se]=await Promise.all([api("GET",`/api/influencers/${INF}/timeline?drafts=true`),api("GET",`/api/influencers/${INF}/seasons`)]);
+  m.innerHTML=`<div class="two"><div><div class="card"><h2>새 스토리</h2><label>주제·요청 (선택)</label><textarea id="topic" placeholder="예) 미딩에서 방문했던 식당에서 이전에 소개하지 않은 메뉴"></textarea>
+  <div class="row"><div><label>날짜</label><input type="date" id="sdate"></div><div><label><input type="checkbox" id="major"> 중요한 사건</label><label><input type="checkbox" id="flash"> 회상</label></div></div>
+  <button class="b p" onclick="act(this,genStory)">초안 생성</button></div>
+  <div class="card"><h2>시즌(연속 스토리)</h2><div class="row"><div><label>일수</label><input id="days" type="number" value="30" min="1" max="120"></div><div><label>구간</label><input id="chunk" type="number" value="7"></div></div>
+  <label>테마</label><input id="theme" placeholder="하노이 생활" style="width:100%"><button class="b" onclick="act(this,planSeason)">시즌 계획 + 첫 구간 작성</button>
+  ${se.seasons.map(s=>`<div style="margin-top:8px"><b>${esc(s.title)}</b> ${st(s.status)} <span class="muted">${s.total_days}일</span><br>
+  <button class="b" onclick="act(this,()=>seasonAct('${s.season_id}','approve'))">대기 구간 순서대로 승인</button><button class="b" onclick="act(this,()=>seasonAct('${s.season_id}','next'))">다음 구간 작성</button></div>`).join("")}</div></div>
+  <div><div id="storyDetail"></div><div class="card"><h2>타임라인</h2><table><tr><th>날짜</th><th>제목</th><th>상태</th><th>사건</th></tr>
+  ${tl.timeline.slice().reverse().map(s=>`<tr class="click" onclick="openStory('${s.story_id}')"><td>${esc(s.story_date)}${s.day_no?`<br><span class="muted">${s.day_no}일 차</span>`:""}</td><td>${esc(s.title)}</td><td>${st(s.status)}</td><td>${s.events.map(e=>`<span class="chip">${esc(e.event_type)} ${e.status==="OPEN"?"⏳":""} ${esc(e.title)}</span>`).join("")}</td></tr>`).join("")||'<tr><td class="muted" colspan=4>아직 스토리가 없습니다</td></tr>'}</table>
+  ${tl.other_events.length?`<h3>설정 변경 기록</h3>${tl.other_events.map(e=>`<div class="issue">${esc(e.occurred_at)} ${esc(e.title)}</div>`).join("")}`:""}</div></div></div>`};
+async function genStory(){const r=await api("POST",`/api/influencers/${INF}/stories`,{topic:$("#topic").value,story_date:$("#sdate").value||null,is_major:$("#major").checked,is_flashback:$("#flash").checked});
+  if(r.provider_note)toast(r.provider_note,6000);await R.story($("#main"));await openStory(r.story_id)}
+async function planSeason(){const r=await api("POST",`/api/influencers/${INF}/season`,{total_days:+$("#days").value,chunk_days:+$("#chunk").value,theme:$("#theme").value});toast(`시즌 계획 완료: ${r.first_chunk.stories.length}개 에피소드 초안`);render()}
+async function seasonAct(id,a){const r=await api("POST",`/api/seasons/${id}/${a}`);toast(a==="approve"?`승인: ${r.approved_days.join(", ")||"없음"}${r.failed.length?" / 멈춤: "+r.failed[0].message:""}`:`작성: ${(r.stories||[]).length}개`,6000);render()}
+async function openStory(id){const r=await api("GET","/api/stories/"+id);const s=r.story,d=s.data_json;const done=["APPROVED","PUBLISHED"].includes(s.status);
+  $("#storyDetail").innerHTML=`<div class="card"><h2>${esc(s.title)} ${st(s.status)}</h2><p class="muted">${esc(s.story_date)} · 생성기 ${esc(s.provider)}${s.revision_of?` · 수정본(원본 ${esc(s.revision_of)})`:""}</p>
+  <textarea id="sbody" ${done?"readonly":""} style="min-height:130px">${esc(d.body)}</textarea>
+  <p>인물: ${(d.characters||[]).map(c=>`<span class="chip">${esc(c.name)} · ${esc(c.relation||c.role||"")}</span>`).join("")} 장소: ${(d.places||[]).map(c=>`<span class="chip">${esc(c.name)}</span>`).join("")} 항목: ${(d.items||[]).map(c=>`<span class="chip">${esc(c.name)}</span>`).join("")}</p>
+  <h3>모순 검사</h3>${issues(s.validation_json)}
+  <div style="margin-top:10px">${!done?`<button class="b p" onclick="act(this,()=>storyAct('${id}','approve'))">승인·확정</button><button class="b" onclick="act(this,()=>saveBody('${id}'))">본문 수정 저장</button><button class="b d" onclick="act(this,()=>storyAct('${id}','reject'))">반려</button>`:
+  `<button class="b" onclick="act(this,()=>reviseStory('${id}'))">수정본 만들기</button><button class="b" onclick="act(this,async()=>{const x=await api('POST','/api/stories/${id}/continue',{});await R.story($('#main'));openStory(x.story_id)})">이어 쓰기</button>
+  <button class="b p" onclick="act(this,()=>makeText('${id}'))">텍스트 콘텐츠 생성</button><button class="b" onclick="act(this,()=>makeImg('${id}'))">이미지 3장</button><button class="b" onclick="act(this,async()=>{await api('POST','/api/stories/${id}/video');toast('영상 작업 등록 (AI 작업 관리에서 확인)')})">영상</button>
+  <button class="b" onclick="act(this,async()=>{const x=await api('POST','/api/stories/${id}/package',{});toast('패키지: '+x.path,6000)})">패키지</button>`}
+  <button class="b" onclick="act(this,async()=>{await api('POST','/api/stories/${id}/validate');openStory('${id}')})">다시 검사</button></div>
+  ${r.contents.length?`<h3>파생 콘텐츠</h3>${r.contents.map(c=>`<span class="chip">${esc(c.content_type)}/${esc(c.language)} ${st(c.status)}</span>`).join("")}`:""}</div>`}
+async function storyAct(id,a){let body={};if(a==="approve"){try{await api("POST",`/api/stories/${id}/approve`,{})}catch(e){if(e.error==="VALIDATION_FAILED"){const why=prompt("모순 검사 오류가 있습니다. 그래도 승인하려면 사유를 입력하세요 (취소 시 중단).");if(!why)return;await api("POST",`/api/stories/${id}/approve`,{force_reason:why})}else return}}
+  else await api("POST",`/api/stories/${id}/reject`,{comment:prompt("반려 사유")||""});toast("처리했습니다");refreshBadge();await R.story($("#main"));openStory(id)}
+async function saveBody(id){const r=await api("POST",`/api/stories/${id}/revise`,{changes:{body:$("#sbody").value}});toast("저장했습니다");openStory(r.story_id)}
+async function reviseStory(id){const ins=prompt("수정 지시 또는 메모 (본문은 다음 화면에서 고칩니다)");if(ins===null)return;const r=await api("POST",`/api/stories/${id}/revise`,{instruction:ins});toast(r.message,6000);await R.story($("#main"));openStory(r.story_id)}
+async function makeText(id){const r=await api("POST",`/api/stories/${id}/text`,{});toast(`${r.contents.length}개 콘텐츠를 검수함에 올렸습니다`);refreshBadge();openStory(id)}
+async function makeImg(id){const r=await api("POST",`/api/stories/${id}/images`,{count:3});toast(r.job.deduplicated?"이미 같은 작업이 있습니다":"이미지 작업을 등록했습니다")}
+
+R.archive=async m=>{const n=needInf();if(n){m.innerHTML=n;return}const ent=await api("GET",`/api/influencers/${INF}/entities`);
+  m.innerHTML=`<div class="card"><h2>기억 검색</h2><div class="row"><div style="flex:3"><input id="q" style="width:100%" placeholder="예) 미딩에서 방문했던 식당"></div>
+  <div><select id="qt"><option value="">전체</option><option value="MEMORY">기억</option><option value="STORY">스토리</option><option value="EVENT">사건</option></select></div><div><input type="date" id="qf"></div><div><input type="date" id="qto"></div><div><button class="b p" onclick="act(this,search)">검색</button></div></div><div id="qres"></div></div>
+  <div class="two"><div class="card"><h2>인물</h2><table>${ent.people.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.relation||"")}</td><td class="muted">${p.appearances}회</td></tr>`).join("")||'<tr><td class="muted">없음</td></tr>'}</table>
+  <h2 style="margin-top:14px">기억 추가</h2><textarea id="mem" placeholder="장기적으로 기억해야 할 사실"></textarea><select id="memft"><option value="FICTION">가상 설정</option><option value="REAL">현실에서 확인된 사실</option></select> <button class="b" onclick="act(this,addMem)">추가</button></div>
+  <div class="card"><h2>장소와 소개한 항목</h2><table><tr><th>장소</th><th>방문</th><th>소개한 항목</th></tr>${ent.places.map(p=>`<tr><td>${esc(p.name)}<br><span class="muted">${esc(p.type||"")} · ${esc(p.area||"")}</span></td><td>${p.visits.map(esc).join("<br>")}</td><td>${p.items.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</td></tr>`).join("")||'<tr><td class="muted">없음</td></tr>'}</table></div></div>`};
+async function search(){const p=new URLSearchParams({q:$("#q").value,types:$("#qt").value});if($("#qf").value)p.set("date_from",$("#qf").value);if($("#qto").value)p.set("date_to",$("#qto").value);
+  const r=await api("GET",`/api/influencers/${INF}/memory?`+p);$("#qres").innerHTML=`<table><tr><th>유형</th><th>날짜</th><th>내용</th><th>점수</th></tr>${r.results.map(x=>`<tr><td><span class="chip">${esc(x.type)}</span></td><td>${esc(x.occurred_at||"")}</td><td>${x.title?`<b>${esc(x.title)}</b><br>`:""}${esc(x.text)}${x.fact_type?` <span class="chip">${esc(x.fact_type)}</span>`:""}</td><td class="muted">${x.score??""}</td></tr>`).join("")||'<tr><td class="muted" colspan=4>결과 없음</td></tr>'}</table>`}
+async function addMem(){await api("POST",`/api/influencers/${INF}/memory`,{content:$("#mem").value,fact_type:$("#memft").value});toast("기억을 추가했습니다");$("#mem").value=""}
+
+R.studio=async m=>{const n=needInf();if(n){m.innerHTML=n;return}
+  m.innerHTML=`<div class="card"><h2>콘텐츠 스튜디오</h2><p class="muted">실행하면 과거 기억 검색 → 스토리 초안 → 모순 검사 → 스토리 확정 → 콘텐츠 생성까지 진행합니다. 결과물은 검수함에서 승인해야 게시할 수 있습니다.</p>
+  <label>스토리</label><input id="stTopic" style="width:100%" placeholder="하노이에서 새로운 한국 음식점 발견">
+  <div class="row"><div><label>이미지</label><input id="stImg" type="number" value="3" min="0" max="10"></div><div><label>비율</label><select id="stAsp"><option>4:5</option><option>9:16</option><option>1:1</option></select></div>
+  <div><label>쇼츠 길이(초)</label><input id="stDur" type="number" value="30"></div><div><label>언어</label><input id="stLang" value="ko,vi"></div></div>
+  <label>결과물</label><label><input type="checkbox" class="fmt" value="instagram_post" checked> 인스타그램 게시물</label><label><input type="checkbox" class="fmt" value="shorts_script" checked> 쇼츠 대본</label><label><input type="checkbox" class="fmt" value="blog" checked> 블로그</label><label><input type="checkbox" id="stVid"> 쇼츠 영상 (FFmpeg 필요)</label>
+  <label><input type="checkbox" id="stAuto" checked> 모순 검사를 통과하면 스토리를 바로 확정</label>
+  <button class="b p" onclick="act(this,runStudio)">실행</button><div id="stOut"></div></div>`};
+async function runStudio(){const fm=[...document.querySelectorAll(".fmt:checked")].map(x=>x.value);
+  try{const r=await api("POST","/api/studio/run",{influencer_id:INF,topic:$("#stTopic").value,images:+$("#stImg").value,aspect:$("#stAsp").value,shorts_duration:+$("#stDur").value,
+   languages:$("#stLang").value.split(",").map(x=>x.trim()).filter(Boolean),formats:fm,video:$("#stVid").checked,auto_approve_story:$("#stAuto").checked});
+   $("#stOut").innerHTML=r.steps.map(s=>`<div class="issue"><b>${esc(s.step)}</b> ${esc(s.title||s.job_id||"")} ${s.contents?s.contents.map(c=>`<span class="chip">${esc(c.content_type)}/${esc(c.language)}</span>`).join(""):""}${s.validation?issues(s.validation):""}</div>`).join("")+(r.message?`<p>${esc(r.message)}</p>`:"");refreshBadge()}
+  catch(e){$("#stOut").innerHTML=`<div class="issue ERROR">${esc(e.message||"")}</div>${e.steps?e.steps.map(s=>issues(s.validation)).join(""):""}`}}
+
+R.review=async m=>{const r=await api("GET","/api/approvals");pending=r.approvals.length;nav();
+  m.innerHTML=`<div class="two"><div class="card"><h2>검수 대기 (${r.approvals.length})</h2><table>${r.approvals.map(a=>`<tr class="click" onclick="openReview('${a.approval_id}','${a.target_type}','${a.target_id}')"><td><span class="chip">${esc(a.target_type)}</span><br>${esc(a.influencer_name||"")}</td><td>${esc(a.payload_json?.title||a.payload_json?.type||a.payload_json?.summary||a.payload_json?.content||a.target_id)}${a.payload_json?.language?" / "+esc(a.payload_json.language):""}</td></tr>`).join("")||'<tr><td class="muted">대기 중인 항목이 없습니다</td></tr>'}</table></div><div id="rv"><div class="card muted">항목을 선택하세요.</div></div></div>`};
+async function openReview(aid,type,tid){let html="";
+  if(type==="CONTENT"){const c=await api("GET","/api/contents/"+tid);const d=c.data;
+    html=`<h2>${esc(c.content.title)}</h2><p class="muted">${esc(c.content.content_type)} · ${esc(c.content.language)} · 스토리 ${esc(c.content.story_id)} · v${c.content.current_version}</p>
+    ${c.assets.length?`<div class="imgs">${c.assets.map(a=>a.url?`<a href="${a.url}" target="_blank"><img src="${a.url}" title="${esc(a.prompt||"")}"></a>${a.is_placeholder?'<span class="chip s-FAILED">자리표시</span>':""}`:"").join("")}</div>`:""}
+    ${d.caption!==undefined?`<label>캡션</label><textarea id="ed_caption" style="min-height:150px">${esc(d.caption)}</textarea><p>${(d.hashtags||[]).map(esc).join(" ")}</p>`:""}
+    ${d.body_markdown!==undefined?`<label>본문</label><textarea id="ed_body_markdown" style="min-height:220px">${esc(d.body_markdown)}</textarea>`:""}
+    ${d.scenes?`<table><tr><th>시간</th><th>화면</th><th>내레이션</th></tr>${d.scenes.map(s=>`<tr><td>${esc(s.t)}</td><td>${esc(s.visual)}</td><td>${esc(s.narration)}</td></tr>`).join("")}</table>`:""}
+    <h3>검사</h3>${issues(c.validation)}
+    ${d.caption!==undefined||d.body_markdown!==undefined?`<button class="b" onclick="act(this,()=>saveContent('${aid}','${tid}'))">수정 저장 (새 버전)</button>`:""}`}
+  else if(type==="STORY"){const s=(await api("GET","/api/stories/"+tid)).story;html=`<h2>${esc(s.title)}</h2><p class="muted">${esc(s.story_date)}</p><pre>${esc(s.data_json.body)}</pre><h3>모순 검사</h3>${issues(s.validation_json)}`}
+  else{const a=(await api("GET","/api/approvals")).approvals.find(x=>x.approval_id===aid);html=`<h2>${esc(type)}</h2><pre>${esc(JSON.stringify(a?.payload_json,null,2))}</pre>`}
+  $("#rv").innerHTML=`<div class="card">${html}<div style="margin-top:10px"><button class="b p" onclick="act(this,()=>decide('${aid}','APPROVED'))">승인</button><button class="b" onclick="act(this,()=>decide('${aid}','CHANGES_REQUESTED'))">수정 요청</button><button class="b d" onclick="act(this,()=>decide('${aid}','REJECTED'))">반려</button></div></div>`}
+async function saveContent(aid,cid){const ch={};["caption","body_markdown"].forEach(k=>{const el=$("#ed_"+k);if(el)ch[k]=el.value});await api("POST",`/api/contents/${cid}/revise`,{changes:ch});toast("새 버전을 저장했습니다");const a=(await api("GET","/api/approvals")).approvals.find(x=>x.target_id===cid);if(a)openReview(a.approval_id,"CONTENT",cid)}
+async function decide(aid,dec){let body={decision:dec,comment:dec==="APPROVED"?"":(prompt("코멘트")||"")};
+  try{await api("POST","/api/approvals/"+aid,body)}catch(e){if(e.error==="VALIDATION_FAILED"&&e.validation){$("#rv").insertAdjacentHTML("beforeend",`<div class="card">${issues(e.validation)}</div>`)}return}
+  toast("처리했습니다");render()}
+
+R.publish=async m=>{const n=needInf();if(n){m.innerHTML=n;return}
+  const [ap,pubs]=await Promise.all([api("GET",`/api/contents?influencer_id=${INF}&status=APPROVED`),api("GET",`/api/publications?influencer_id=${INF}`)]);
+  const plats=["instagram","youtube_shorts","tiktok","facebook","blog","x","local_export"];
+  m.innerHTML=`<div class="card"><h2>승인된 콘텐츠</h2><p class="muted">자동 게시 API 가 연결되지 않은 플랫폼은 게시 패키지를 만든 뒤 '수동 게시 필요'로 표시됩니다. local_export 는 outbox 폴더로 내보냅니다.</p><table><tr><th>콘텐츠</th><th>스토리</th><th>플랫폼</th><th></th></tr>
+  ${ap.contents.map(c=>`<tr><td>${esc(c.content_type)}/${esc(c.language)}<br><span class="muted">${esc(c.title)}</span></td><td>${esc(c.story_title)}</td><td><select id="pl_${c.content_id}">${plats.map(p=>`<option ${p===c.platform?"selected":""}>${p}</option>`).join("")}</select></td><td><button class="b" onclick="act(this,()=>prep('${c.content_id}'))">게시 준비</button></td></tr>`).join("")||'<tr><td class="muted" colspan=4>승인된 콘텐츠가 없습니다</td></tr>'}</table></div>
+  <div class="card"><h2>게시 기록</h2><table><tr><th>콘텐츠</th><th>플랫폼</th><th>상태</th><th>예약</th><th></th></tr>${pubs.publications.map(p=>`<tr><td>${esc(p.content_type)}/${esc(p.language)}<br><span class="muted">${esc(p.package_path||"")}</span></td><td>${esc(p.platform)}</td><td>${st(p.status)}${p.detail_json?.instructions?`<br><span class="muted">${esc(p.detail_json.instructions)}</span>`:""}</td><td>${esc(p.scheduled_at||"")}</td>
+  <td>${["PREPARED","SCHEDULED"].includes(p.status)?`<input type="datetime-local" id="at_${p.publication_id}"><button class="b" onclick="act(this,()=>pubAct('${p.publication_id}','schedule'))">예약</button><button class="b p" onclick="act(this,()=>pubAct('${p.publication_id}','execute'))">지금 실행</button>`:""}
+  ${p.status==="MANUAL_REQUIRED"?`<button class="b p" onclick="act(this,()=>pubAct('${p.publication_id}','confirm'))">게시 완료 기록</button>`:""}${p.status!=="PUBLISHED"&&p.status!=="CANCELLED"?`<button class="b d" onclick="act(this,()=>pubAct('${p.publication_id}','cancel'))">취소</button>`:""}</td></tr>`).join("")||'<tr><td class="muted" colspan=5>없음</td></tr>'}</table></div>`};
+async function prep(cid){await api("POST",`/api/contents/${cid}/publish`,{platform:$("#pl_"+cid).value});toast("게시 패키지를 만들었습니다");render()}
+async function pubAct(pid,a){let body={};if(a==="schedule"){const v=$("#at_"+pid).value;if(!v){toast("예약 시간을 고르세요");return}body={scheduled_at:v}}
+  if(a==="confirm")body={external_url:prompt("게시물 URL (선택)")||""};const r=await api("POST",`/api/publications/${pid}/${a}`,body);toast(r.note||r.publication?.status||"처리했습니다",5000);render()}
+
+R.analytics=async m=>{const n=needInf();if(n){m.innerHTML=n;return}
+  const [rep,cs]=await Promise.all([api("GET",`/api/influencers/${INF}/report?days=30`),api("GET",`/api/contents?influencer_id=${INF}`)]);const pub=cs.contents.filter(c=>["PUBLISHED","APPROVED"].includes(c.status));
+  m.innerHTML=`<div class="two"><div class="card"><h2>성과 입력</h2><p class="muted">플랫폼 API 연동 전까지는 직접 입력하거나 CSV 로 가져옵니다.</p><select id="anC" style="width:100%">${pub.map(c=>`<option value="${c.content_id}">${esc(c.content_type)}/${esc(c.language)} · ${esc(c.story_title)}</option>`).join("")}</select>
+  <div class="row">${["views","likes","comments","shares","saves"].map(k=>`<div><label>${k}</label><input id="an_${k}" type="number" value="0"></div>`).join("")}</div><button class="b" onclick="act(this,recordAn)">기록</button>
+  <h3>CSV 가져오기</h3><textarea id="anCsv" placeholder="content_id,measured_at,views,likes,comments,shares,saves"></textarea><button class="b" onclick="act(this,async()=>{const r=await api('POST','/api/analytics/csv',{csv:$('#anCsv').value});toast('가져옴: '+r.imported);render()})">가져오기</button></div>
+  <div class="card"><h2>최근 30일 보고서</h2><p class="muted">${esc(rep.data_note)}</p><div class="grid">${Object.entries(rep.totals).map(([k,v])=>`<div class="stat"><span>${esc(k)}</span><b>${v}</b></div>`).join("")}</div>
+  <h3>주제별 평균 점수</h3><table>${rep.by_topic.map(t=>`<tr><td>${esc(t.topic)}</td><td>${t.score}</td><td class="muted">${t.contents}개</td></tr>`).join("")}</table>
+  <h3>인기 스토리</h3><table>${rep.top_stories.map(t=>`<tr><td>${esc(t.title)}</td><td>${t.score}</td></tr>`).join("")}</table>
+  <button class="b p" onclick="act(this,strategy)">다음 달 계획 제안</button><div id="strat"></div></div></div>`};
+async function recordAn(){const metrics={};["views","likes","comments","shares","saves"].forEach(k=>metrics[k]=+$("#an_"+k).value);await api("POST","/api/analytics",{content_id:$("#anC").value,metrics});toast("기록했습니다");render()}
+async function strategy(){const r=await api("POST",`/api/influencers/${INF}/strategy`,{days:30});const p=r.proposal;
+  $("#strat").innerHTML=`<p>${esc(p.summary)}</p><p>유지: ${(p.keep||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join("")} 시도: ${(p.try||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join("")} 축소: ${(p.reduce||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</p>
+  <table>${(p.plan||[]).map(w=>`<tr><td>${esc(w.week)}주</td><td>${esc(w.theme)}</td><td>${esc(w.idea)}</td></tr>`).join("")}</table><p class="muted">${esc(r.guardrail)}</p>`}
+
+R.jobs=async m=>{const r=await api("GET","/api/jobs");
+  m.innerHTML=`<div class="card"><h2>AI 작업 <button class="b" onclick="render()">새로고침</button></h2><table><tr><th>작업</th><th>상태</th><th>진행</th><th>재시도</th><th>오류</th><th></th></tr>
+  ${r.jobs.map(j=>`<tr><td>${esc(j.job_type)}<br><span class="muted">${esc(j.job_id)} · ${esc(j.created_at)}</span></td><td>${st(j.status)}</td><td>${Math.round(j.progress*100)}%</td><td>${j.retry_count}/${j.max_retries}</td><td class="muted">${esc(j.error||"")}</td>
+  <td>${["FAILED","CANCELLED"].includes(j.status)?`<button class="b" onclick="act(this,async()=>{await api('POST','/api/jobs/${j.job_id}/retry');render()})">재시도</button>`:""}${["QUEUED","RUNNING"].includes(j.status)?`<button class="b d" onclick="act(this,async()=>{await api('POST','/api/jobs/${j.job_id}/cancel');render()})">취소</button>`:""}</td></tr>`).join("")||'<tr><td class="muted" colspan=6>작업이 없습니다</td></tr>'}</table></div>`};
+
+R.settings=async m=>{const [md,sc,inf]=await Promise.all([api("GET","/api/models"),api("GET","/api/schedules"),api("GET","/api/influencers")]);
+  m.innerHTML=`<div class="two"><div><div class="card"><h2>제작 도구 상태</h2><table>
+  <tr><td>언어 모델</td><td>${esc(md.llm.adapter)} · ${esc(md.llm.model)} ${md.llm.ollama_available===true?st("ACTIVE"):md.llm.ollama_available===false?'<span class="s-FAILED">Ollama 연결 안 됨 → 템플릿 사용</span>':""}</td></tr>
+  <tr><td>임베딩</td><td>${esc(md.embedding)}</td></tr><tr><td>이미지</td><td>${esc(md.image.adapter)} ${md.image.placeholder?'<span class="s-FAILED">ComfyUI 미연결 → 자리표시 이미지</span>':""}</td></tr>
+  <tr><td>영상</td><td>${esc(md.video.adapter)} ${md.video.available?st("ACTIVE"):'<span class="s-FAILED">FFmpeg 없음</span>'}</td></tr><tr><td>음성</td><td><span class="s-FAILED">미연결</span></td></tr></table>
+  <h3>자동화 정책</h3><pre>${esc(JSON.stringify(md.policy,null,2))}</pre><p class="muted">정책은 .env 파일에서 바꿉니다 (README 참고). 데이터 폴더: ${esc(md.data_dir)}</p></div>
+  <div class="card"><h2>관리자 토큰</h2><input id="tok" type="password" placeholder="AIS_ADMIN_TOKEN 을 설정한 경우에만" value="${esc(localStorage.getItem("token")||"")}"><button class="b" onclick="localStorage.setItem('token',$('#tok').value);toast('저장했습니다')">저장</button></div></div>
+  <div><div class="card"><h2>자동화 스케줄</h2><p class="muted">정해진 시간에 스토리 초안을 만듭니다. 공개 게시는 하지 않습니다.</p><div class="row"><div><select id="scInf">${inf.influencers.filter(i=>i.status==="ACTIVE").map(i=>`<option value="${i.influencer_id}">${esc(i.name)}</option>`).join("")}</select></div><div><input type="time" id="scTime" value="09:00"></div><div><button class="b" onclick="act(this,async()=>{await api('POST','/api/schedules',{influencer_id:$('#scInf').value,run_time:$('#scTime').value});render()})">저장</button></div></div>
+  <table>${sc.schedules.map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.run_time)}</td><td>${s.enabled?"사용":"중지"}</td><td class="muted">최근 ${esc(s.last_run_date||"-")}</td></tr>`).join("")}</table></div>
+  <div class="card"><h2>백업·점검</h2><button class="b" onclick="act(this,async()=>{const r=await api('POST','/api/system/backup');toast('백업: '+r.path,7000)})">지금 백업</button>
+  <button class="b" onclick="act(this,async()=>{const r=await api('GET','/api/system/integrity');$('#integ').textContent=JSON.stringify(r,null,2)})">연결 관계 점검</button>
+  <button class="b" onclick="act(this,async()=>{const r=await api('POST','/api/system/reindex');toast('색인: '+r.indexed)})">검색 색인 재생성</button><pre id="integ"></pre></div></div></div>`};
+
+loadInf().then(()=>{nav();render();refreshBadge()});setInterval(()=>{if(view==="jobs")render();refreshBadge()},10000);
+</script>
+</body>
+</html>
